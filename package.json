@@ -1,0 +1,28 @@
+{
+  "name": "scheduler-backend",
+  "version": "1.0.0",
+  "description": "The server side of the app",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/MrGrimmNet/Scheduler-Backend.git"
+  },
+  "keywords": [
+    "express",
+    "nodejs",
+    "backend"
+  ],
+  "author": "Mr Grimm",
+  "license": "UNLICENSED",
+  "bugs": {
+    "url": "https://github.com/MrGrimmNet/Scheduler-Backend/issues"
+  },
+  "homepage": "https://github.com/MrGrimmNet/Scheduler-Backend#readme",
+  "dependencies": {
+    "express": "^4.17.1",
+    "mysql": "^2.18.1"
+  }
+}
