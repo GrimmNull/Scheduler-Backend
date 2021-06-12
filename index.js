@@ -35,17 +35,43 @@ app.get(
 )
 
 app.get(
+    '/users/:userId/tasks/',
+    (req, res) => {
+        connection.query(`SELECT * FROM tasks WHERE userId=${req.params.userId}`, (err, rows) => {
+            if (err) {
+                res.status(400).send({
+                    message: 'There are no tasks for this id'
+                })
+            }
+            const results = rows.map(row => {
+                return {
+                    taskId: row.id,
+                    userId: row.userId,
+                    deadline: row.deadline,
+                    description: row.description,
+                    completed: row.completed === 1
+                }
+            })
+            res.status(200).send({
+                message: 'Tasks successfully returned',
+                results: results
+            })
+        })
+    }
+)
+
+app.get(
     '/tasks/:id',
     (req, res) => {
         connection.query(`SELECT * FROM tasks WHERE id=${req.params.id}`, (err, rows) => {
-            if(err){
+            if (err) {
                 res.status(400).send({
-                    message:'There is no task with this id'
+                    message: 'There is no task with this id'
                 })
                 return
             }
             res.status(200).send({
-                message:'Task found successfully',
+                message: 'Task found successfully',
                 user: rows[0].userId,
                 description: rows[0].description,
                 deadline: rows[0].deadline.toString().replace(/ GMT.*/, ''),
@@ -102,5 +128,51 @@ app.post(
             }
         })
 
+    }
+)
+
+app.put(
+    '/tasks/:taskId',
+    (req, res) => {
+        let updateFields = []
+        for (const field of req.body.columns.split(" ")) {
+            if (!['completed', 'userId'].includes(field)) {
+                updateFields.push(`${field} = '${req.body[field]}'`)
+            } else {
+                updateFields.push(`${field} = ${req.body[field]}`)
+            }
+        }
+        connection.query(`UPDATE tasks SET ${updateFields} WHERE id=${req.params.taskId}`, (err, result) => {
+            if (err) {
+                res.status(500).send({
+                    message: 'There was an error when trying to update the task'
+                })
+                throw err
+                return
+            }
+            res.status(200).send({
+                message: 'The task was updated successfully'
+            })
+            return
+        })
+    }
+)
+
+app.delete(
+    '/tasks/:taskId',
+    (req, res) => {
+        connection.query(`DELETE FROM tasks WHERE id=${req.params.taskId}`, (err) => {
+            if (err) {
+                res.status(500).send({
+                    message: 'There was an error when trying to delete the task'
+                })
+                throw err
+                return
+            } else {
+                res.status(200).send({
+                    message: 'The task was deleted successfully'
+                })
+            }
+        })
     }
 )
