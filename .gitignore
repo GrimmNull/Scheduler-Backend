@@ -1,6 +1,7 @@
 # Default ignored files
 /shelf/
 /node_modules/
+databaseCredentials.js
 /workspace.xml
 # Editor-based HTTP Client requests
 /httpRequests/
