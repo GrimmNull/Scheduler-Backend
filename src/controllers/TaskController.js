@@ -8,7 +8,7 @@ export const getTaskById = (req, res) => {
             res.status(400).send({
                 message: 'There is no task with this id'
             })
-            return
+            throw err
         }
         res.status(200).send({
             message: 'Task found successfully',
@@ -17,38 +17,6 @@ export const getTaskById = (req, res) => {
             deadline: rows[0].deadline.toString().replace(/ GMT.*/, ''),
             completed: rows[0].completed === 1
         })
-    })
-}
-
-export const getSubtasks = (req, res) => {
-    connection.query(`SELECT * FROM tasks WHERE parentTaskId=${req.params.taskId}`, (err, rows) => {
-        if (err) {
-            res.status(500).send({
-                message: 'There was a server error when trying to get the subtasks'
-            })
-            return
-        }
-        if (!rows[0]) {
-            res.status(400).send({
-                message: 'There is no task with this id or it doesn`t have any subtasks'
-            })
-        } else {
-            let results = []
-            for (const row of rows) {
-                results.push({
-                    id: row.id,
-                    userId: row.userId,
-                    description: row.description,
-                    startTime:row.startTime,
-                    deadline:row.deadline,
-                    completed: row.completed === 1
-                })
-            }
-            res.status(200).send({
-                message: 'Tasks successfully retrieved',
-                results: results
-            })
-        }
     })
 }
 
@@ -72,6 +40,7 @@ export const addTask = (req, res) => {
             res.send(500).send({
                 message: "There was a server error when retrieving the user"
             })
+            throw err
         }
         if (!rows[0]) {
             res.status(400).send({
