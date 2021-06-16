@@ -5,13 +5,13 @@ const minimalColumns = ['username', 'password', 'email']
 export const getUserTasks = (req, res) => {
     connection.query(`SELECT * FROM tasks WHERE userId=${req.params.userId} ORDER BY parentTaskId ASC`, (err, rows) => {
         if (err) {
-            res.status(500).send({
+            res.status(500).json({
                 message: 'There was a server error'
             })
             throw err
         }
         if (!rows[0]) {
-            res.status(404).send({
+            res.status(404).json({
                 message: 'There is no user with this id'
             })
         } else {
@@ -20,12 +20,13 @@ export const getUserTasks = (req, res) => {
                     taskId: row.id,
                     userId: row.userId,
                     parentTaskId: row.parentTaskId,
+                    startTime: row.startTime,
                     deadline: row.deadline,
                     description: row.description,
                     completed: row.completed === 1
                 }
             })
-            res.status(200).send({
+            res.json({
                 message: 'Tasks successfully returned',
                 results: results
             })
@@ -37,17 +38,17 @@ export const getUserById = (req, res) => {
     console.log('what')
     connection.query(`SELECT id,username,email FROM users WHERE id=${req.params.userId}`, (err, rows) => {
         if (err) {
-            res.status(500).send({
+            res.status(500).json({
                 message: 'There was a server error'
             })
             throw err
         }
         if (!rows[0]) {
-            res.status(404).send({
+            res.status(404).json({
                 message: 'There is no user with this id'
             })
         } else {
-            res.status(200).send({
+            res.json({
                 message: 'User retrieved successfully',
                 id: rows[0].id,
                 username: rows[0].username,
@@ -61,22 +62,22 @@ export const checkCredentials = (req, res) => {
     connection.query(`SELECT username, password FROM users WHERE username like '${req.body.username}'`, (err, rows) => {
         if (err) {
             console.log(err)
-            res.status(500).send({
+            res.status(500).json({
                 message: 'There was a server error when checking the existence of user'
             })
             throw err
         }
         if(!rows[0]){
-            res.status(409).send({
+            res.status(409).json({
                 message: 'There is no user with this username'
             })
         } else {
             if(req.body.password===rows[0].password){
-                res.status(200).send({
+                res.json({
                     message:'Logged in'
                 })
             } else {
-                res.status(400).send({
+                res.status(400).json({
                     message: 'Incorrect password'
                 })
             }
