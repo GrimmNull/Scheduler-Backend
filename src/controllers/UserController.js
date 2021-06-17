@@ -3,7 +3,11 @@ import connection from '../databaseConnection.js'
 const minimalColumns = ['username', 'password', 'email']
 
 export const getUserTasks = (req, res) => {
-    connection.query(`SELECT * FROM tasks WHERE userId=${req.params.userId} ORDER BY parentTaskId ASC`, (err, rows) => {
+    let rootOnlyRequest=''
+    if(req.query.rootOnly){
+        rootOnlyRequest='AND parentTaskId is null'
+    }
+    connection.query(`SELECT * FROM tasks WHERE userId=${req.params.userId} ${rootOnlyRequest} ORDER BY parentTaskId ASC`, (err, rows) => {
         if (err) {
             res.status(500).json({
                 message: 'There was a server error'
@@ -12,7 +16,7 @@ export const getUserTasks = (req, res) => {
         }
         if (!rows[0]) {
             res.status(404).json({
-                message: 'There is no user with this id'
+                message: 'There is no user with this id or the user doesn`t have any tasks'
             })
         } else {
             const results = rows.map(row => {

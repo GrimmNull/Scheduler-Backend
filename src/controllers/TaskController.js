@@ -105,3 +105,35 @@ export const deleteTask = (req, res) => {
         }
     })
 }
+
+export const getSubtasks = (req, res) => {
+    connection.query(`SELECT * FROM tasks WHERE parentTaskId=${req.params.taskId}`, (err, rows) => {
+        if (err) {
+            res.status(500).json({
+                message: 'There was a server error when trying to get the subtasks'
+            })
+            return
+        }
+        if (!rows[0]) {
+            res.json({
+                message: 'This task doesn`t have any subtasks'
+            })
+        } else {
+            let results = rows.map(row => {
+                return {
+                    id: row.id,
+                    userId: row.userId,
+                    parentTaskId: row.parentTaskId,
+                    description: row.description,
+                    startTime:row.startTime,
+                    deadline:row.deadline,
+                    completed: row.completed === 1
+                }
+            })
+            res.json({
+                message: 'Tasks successfully retrieved',
+                results: results
+            })
+        }
+    })
+}
