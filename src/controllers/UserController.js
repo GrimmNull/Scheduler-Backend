@@ -1,6 +1,8 @@
 import connection from '../databaseConnection.js'
+import secretKey from '../token.js'
 import bcrypt from 'bcrypt'
-
+import jwt from 'jsonwebtoken'
+import moment from "moment";
 const minimalColumns = ['username', 'password', 'email']
 const saltRounded=10
 
@@ -65,7 +67,7 @@ export const getUserById = (req, res) => {
 }
 
 export const checkCredentials = (req, res) => {
-    connection.query(`SELECT username, password FROM users WHERE username like '${req.body.username}'`, async (err, rows) => {
+    connection.query(`SELECT id,username, password FROM users WHERE username like '${req.body.username}'`, async (err, rows) => {
         if (err) {
             console.log(err)
             res.status(500).json({
@@ -79,9 +81,16 @@ export const checkCredentials = (req, res) => {
             })
         } else {
             const passwordMatch=  await bcrypt.compare(req.body.password, rows[0].password)
+            const token= await jwt.sign({
+                userId: rows[0].id
+            },secretKey,{
+                expiresIn: '72h'
+            })
             if(passwordMatch){
                 res.json({
-                    message:'Logged in'
+                    message:'Logged in',
+                    token: token,
+                    expiresAt: moment().add(72,'hours').format('YYYY-MM-DD HH:mm:ss')
                 })
             } else {
                 res.status(400).json({

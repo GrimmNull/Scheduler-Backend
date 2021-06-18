@@ -1,7 +1,9 @@
 # Default ignored files
 /shelf/
 /node_modules/
-src/databaseCredentials.js
+/src/databaseCredentials.js
+/src/token.js
+/package-lock.json
 /workspace.xml
 # Editor-based HTTP Client requests
 /httpRequests/
