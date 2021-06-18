@@ -21,12 +21,21 @@ export const getTaskById = (req, res) => {
 }
 
 export const addTask = (req, res) => {
-    const {ownerId, deadline, description} = req.body
-    if (!dateGex.test(deadline)) {
-        res.status(400).json({
-            message: 'The date format was not correct'
-        })
-        return
+    const {ownerId, parentTaskId, startTime, deadline, description, type} = req.body
+    if (type !== 'temp') {
+        if (!dateGex.test(deadline)) {
+            res.status(400).json({
+                message: 'The deadline format was not correct'
+            })
+            return
+        }
+
+        if (!dateGex.test(startTime)) {
+            res.status(400).json({
+                message: 'The startTime format was not correct'
+            })
+            return
+        }
     }
 
     if (!ownerId) {
@@ -47,11 +56,20 @@ export const addTask = (req, res) => {
                 message: 'There is no user with this id'
             })
         } else {
-            connection.query(`INSERT INTO tasks(userId,deadline,description,completed) VALUES (${ownerId},'${deadline}','${description}',false)`, (err, result) => {
+            let fields, values
+            if (type !== 'temp') {
+                fields = '(userId,deadline,description,completed)'
+                values = `(${ownerId},'${deadline}','${description}',false)`
+            } else {
+                fields = parentTaskId ? '(userId, parentTaskId, completed)' : '(userId,completed)'
+                values = parentTaskId ? `(${ownerId}, ${parentTaskId},false)` : `(${ownerId},false)`
+            }
+            connection.query(`INSERT INTO tasks${fields} VALUES ${values}`, (err, result) => {
                 if (err) {
                     res.status(500).json({
                         message: 'There was an error when trying to add the task'
                     })
+                    throw err
                 } else {
                     res.json({
                         message: 'Task successfully added',
@@ -69,6 +87,7 @@ export const addTask = (req, res) => {
 }
 
 export const updateTask = (req, res) => {
+    console.log(req.body)
     let updateFields = []
     for (const field of req.body.columns.split(" ")) {
         if (!['completed', 'userId'].includes(field)) {
@@ -121,12 +140,12 @@ export const getSubtasks = (req, res) => {
         } else {
             let results = rows.map(row => {
                 return {
-                    id: row.id,
+                    taskId: row.id,
                     userId: row.userId,
                     parentTaskId: row.parentTaskId,
                     description: row.description,
-                    startTime:row.startTime,
-                    deadline:row.deadline,
+                    startTime: row.startTime,
+                    deadline: row.deadline,
                     completed: row.completed === 1
                 }
             })

@@ -1,6 +1,8 @@
 import connection from '../databaseConnection.js'
+import bcrypt from 'bcrypt'
 
 const minimalColumns = ['username', 'password', 'email']
+const saltRounded=10
 
 export const getUserTasks = (req, res) => {
     let rootOnlyRequest=''
@@ -63,7 +65,7 @@ export const getUserById = (req, res) => {
 }
 
 export const checkCredentials = (req, res) => {
-    connection.query(`SELECT username, password FROM users WHERE username like '${req.body.username}'`, (err, rows) => {
+    connection.query(`SELECT username, password FROM users WHERE username like '${req.body.username}'`, async (err, rows) => {
         if (err) {
             console.log(err)
             res.status(500).json({
@@ -76,7 +78,8 @@ export const checkCredentials = (req, res) => {
                 message: 'There is no user with this username'
             })
         } else {
-            if(req.body.password===rows[0].password){
+            const passwordMatch=  await bcrypt.compare(req.body.password, rows[0].password)
+            if(passwordMatch){
                 res.json({
                     message:'Logged in'
                 })
@@ -96,7 +99,7 @@ export const addUser = (req, res) => {
         })
         return
     }
-    connection.query(`SELECT username FROM users WHERE username like '${req.body.username}'`, (err, rows) => {
+    connection.query(`SELECT username FROM users WHERE username like '${req.body.username}'`, async (err, rows) => {
         if (err) {
             res.status(500).send({
                 message: 'There was a server error when trying to search for a duplicate username'
@@ -108,7 +111,8 @@ export const addUser = (req, res) => {
                 message: 'There is already an user with that username'
             })
         } else {
-            connection.query(`INSERT INTO users(username,password,email) VALUES ('${req.body.username}','${req.body.password}', '${req.body.email}')`, (err, result) => {
+            const password= await bcrypt.hash(req.body.password,saltRounded)
+            connection.query(`INSERT INTO users(username,password,email) VALUES ('${req.body.username}','${password}', '${req.body.email}')`, (err, result) => {
                 if (err) {
                     res.status(500).send({
                         message: 'There was a server error when adding the new user'
