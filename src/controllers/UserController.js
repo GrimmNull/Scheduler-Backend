@@ -89,6 +89,8 @@ export const checkCredentials = (req, res) => {
             if(passwordMatch){
                 res.json({
                     message:'Logged in',
+                    userId: rows[0].id,
+                    username: rows[0].username,
                     token: token,
                     expiresAt: moment().add(72,'hours').format('YYYY-MM-DD HH:mm:ss')
                 })

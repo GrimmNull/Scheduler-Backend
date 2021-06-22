@@ -20,7 +20,7 @@ app.use('/users', userRouter)
 //app start
 app.listen(
     PORT,
-    () => console.log(`It resides on http://localhost:${PORT}`)
+    () => console.log(`It resides at http://localhost:${PORT}`)
 )
 
 //app endpoint

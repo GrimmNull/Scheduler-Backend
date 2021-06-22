@@ -1,5 +1,6 @@
 import connection from '../databaseConnection.js'
-
+import token from '../token.js'
+import jwt from 'jsonwebtoken'
 const dateGex = new RegExp('^\\d{4}\\-(0?[1-9]|1[012])\\-(0?[1-9]|[12][0-9]|3[01])$')
 
 export const getTaskById = (req, res) => {
@@ -20,8 +21,11 @@ export const getTaskById = (req, res) => {
     })
 }
 
-export const addTask = (req, res) => {
-    const {ownerId, parentTaskId, startTime, deadline, description, type} = req.body
+export const addTask = async (req, res) => {
+    const {ownerToken, parentTaskId, startTime, deadline, description, type} = req.body
+    const decoded= await jwt.verify(ownerToken, token)
+    const ownerId=decoded.userId
+    console.log(ownerId)
     if (type !== 'temp') {
         if (!dateGex.test(deadline)) {
             res.status(400).json({
