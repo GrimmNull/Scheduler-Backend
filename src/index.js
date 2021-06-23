@@ -11,11 +11,14 @@ const PORT = 8000
 //initializations
 app.use(express.json())
 app.use(cors())
+
+//to keep track of the requests that come to the backend
 app.use(morgan('combined'))
+
+//separated routers for tasks and users to have them better organized
 app.use('/tasks', taskRouter)
 app.use('/users', userRouter)
 
-// pt useri
 
 //app start
 app.listen(
@@ -23,11 +26,11 @@ app.listen(
     () => console.log(`It resides at http://localhost:${PORT}`)
 )
 
-//app endpoint
+//app endpoint for a wrong adress
 app.get(
     '/',
     (req, res) => {
-        res.status(200).send({
+        res.status(404).json({
             message: 'You shouldn`t be here'
         })
     }

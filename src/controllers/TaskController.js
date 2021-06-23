@@ -7,18 +7,24 @@ const dateGex = new RegExp('^\\d{4}\\-(0?[1-9]|1[012])\\-(0?[1-9]|[12][0-9]|3[01
 export const getTaskById = (req, res) => {
     connection.query(`SELECT * FROM tasks WHERE id=${req.params.id}`, (err, rows) => {
         if (err) {
-            res.status(400).json({
-                message: 'There is no task with this id'
+            res.status(500).json({
+                message: 'There was a server error when trying to fetch the task'
             })
             throw err
         }
-        res.json({
-            message: 'Task found successfully',
-            user: rows[0].userId,
-            description: rows[0].description,
-            deadline: rows[0].deadline.toString().replace(/ GMT.*/, ''),
-            completed: rows[0].completed === 1
-        })
+        if(!rows[0]){
+            res.status(404).json({
+                message: 'There is no task with this id'
+            })
+        } else {
+            res.json({
+                message: 'Task found successfully',
+                user: rows[0].userId,
+                description: rows[0].description,
+                deadline: rows[0].deadline.toString().replace(/ GMT.*/, ''),
+                completed: rows[0].completed === 1
+            })
+        }
     })
 }
 
@@ -32,22 +38,7 @@ export const addTask = async (req, res) => {
     }
     const decoded = await jwt.verify(ownerToken, token)
     const ownerId = decoded.userId
-    if (type !== 'temp') {
-        if (!dateGex.test(deadline)) {
-            res.status(400).json({
-                message: 'The deadline format was not correct'
-            })
-            return
-        }
-
-        if (!dateGex.test(startTime)) {
-            res.status(400).json({
-                message: 'The startTime format was not correct'
-            })
-            return
-        }
-    }
-
+    //we need to know who we add the task to, so we make sure that we have an id
     if (!ownerId) {
         res.status(400).json({
             message: 'The ownerId shouldn`t be null'
@@ -66,14 +57,11 @@ export const addTask = async (req, res) => {
                 message: 'There is no user with this id'
             })
         } else {
-            let fields, values
-            if (type !== 'temp') {
-                fields = '(userId,deadline,description,completed)'
-                values = `(${ownerId},'${deadline}','${description}',false)`
-            } else {
-                fields = parentTaskId ? '(userId, parentTaskId, completed)' : '(userId,completed)'
+            //when we add a task from the frontend, we just add it in the database so we can get an id
+            //after that we use the id that we got to update the task with the actual information that we need
+            //In the first phase we need to know its owner id, its parent id, if it has one
+            const fields = parentTaskId ? '(userId, parentTaskId, completed)' : '(userId,completed)',
                 values = parentTaskId ? `(${ownerId}, ${parentTaskId},false)` : `(${ownerId},false)`
-            }
             connection.query(`INSERT INTO tasks${fields} VALUES ${values}`, (err, result) => {
                 if (err) {
                     res.status(500).json({
@@ -98,6 +86,7 @@ export const addTask = async (req, res) => {
 
 
 export const updateCompletedStatus = (req, res) => {
+    //we want to get the user id to make sure it's updated by its owner + it's parent id because we'll need it later
     connection.query(`SELECT userId, parentTaskId FROM tasks WHERE id=${req.params.taskId}`, async (err, rows) => {
         if (err) {
             res.status(500).json({
@@ -119,6 +108,7 @@ export const updateCompletedStatus = (req, res) => {
             })
             return
         } else {
+            //we update the status with no questions asked
             const parentId = rows[0].parentTaskId
             connection.query(`UPDATE tasks SET completed=${req.body.completed} WHERE id=${req.params.taskId}`, (err) => {
                 if (err) {
@@ -127,28 +117,40 @@ export const updateCompletedStatus = (req, res) => {
                     })
                     throw err
                 }
-                if (req.body.completed) {
-                    connection.query(`SELECT (SELECT count(*) FROM tasks WHERE parentTaskId=${parentId} AND completed=1)=(SELECT count(*) FROM tasks WHERE parentTaskId=${parentId}) as status`, (err, rows) => {
-                        if (err) {
-                            res.status(500).json({
-                                message: 'There was an error when trying to check the complete status of all the subtasks'
-                            })
-                            throw err
-                        }
-                        res.json({
-                            message: 'Task successfully updated',
-                            parentCompleteness: rows[0].status
+                //if the parent id is not null, we want to see if every child of the parent is completed so we can change the status of the parent to completed too
+                if(parentId!==null){
+                    //if we changed the status of the child to completed, it may mean that the parent is completed too
+                    if (req.body.completed) {
+                        connection.query(`SELECT (SELECT count(*) FROM tasks WHERE parentTaskId=${parentId} AND completed=1)=(SELECT count(*) FROM tasks WHERE parentTaskId=${parentId}) as status`, (err, rows) => {
+                            if (err) {
+                                res.status(500).json({
+                                    message: 'There was an error when trying to check the complete status of all the subtasks'
+                                })
+                                throw err
+                            }
+                            if(rows[0].status===1){
+                                connection.query(`UPDATE tasks SET completed=true WHERE id=${parentId}`)
+                                res.json({
+                                    message: 'Task successfully updated',
+                                    parentCompleteness: rows[0].status
+                                })
+                            }
                         })
-                    })
-                } else {
-                    connection.query(`UPDATE tasks SET completed=false WHERE id=${parentId}`, (err) => {
-                        if (err) {
-                            res.status(500).json({
-                                message: 'There was a server error when trying to update the complete status of the parent'
-                            })
-                            throw err
-                        }
-                    })
+                    } else {
+                        //if the child status is not completed, we know for sure that its parent is not completed either
+                        connection.query(`UPDATE tasks SET completed=false WHERE id=${parentId}`, (err) => {
+                            if (err) {
+                                res.status(500).json({
+                                    message: 'There was a server error when trying to update the complete status of the parent'
+                                })
+                                throw err
+                            } else {
+                                res.json({
+                                    message: 'Status updated successfully'
+                                })
+                            }
+                        })
+                    }
                 }
             })
         }
@@ -157,11 +159,16 @@ export const updateCompletedStatus = (req, res) => {
 
 export const updateTask = (req, res) => {
     let updateFields = []
+    //we go through each column to make sure that it's not the completed or userId column because the status we update with the function from before
+    // and the user id can't be updated
     for (const field of req.body.columns.split(" ")) {
         if (!['completed', 'userId'].includes(field)) {
             updateFields.push(`${field} = '${req.body[field]}'`)
         } else {
-            updateFields.push(`${field} = ${req.body[field]}`)
+            res.status(400).json({
+                message: 'You can`t update the status or the userId here'
+            })
+            return
         }
     }
     connection.query(`SELECT userId FROM tasks WHERE id=${req.params.taskId}`, async (err, rows) => {
@@ -171,6 +178,7 @@ export const updateTask = (req, res) => {
             })
             throw err
         }
+        //just the checks to make sure that we have the correct user
         if (!req.body.ownerToken) {
             res.status(400).json({
                 message: 'You need to send an ownerToken with your request'
@@ -185,6 +193,7 @@ export const updateTask = (req, res) => {
             })
             return
         } else {
+            //in case everything is fine, we just update the fields
             connection.query(`UPDATE tasks SET ${updateFields} WHERE id=${req.params.taskId}`, (err, result) => {
                 if (err) {
                     res.status(500).json({
@@ -209,6 +218,7 @@ export const deleteTask = (req, res) => {
             })
             throw err
         }
+        //we perform the same checks, then delete the task if everything is ok
         if (!req.body.ownerToken) {
             res.status(400).json({
                 message: 'You need to send an ownerToken with your request'
@@ -240,6 +250,8 @@ export const deleteTask = (req, res) => {
 
 }
 
+//we use this function to get the children of a task
+//this one is used in combination with getUserTasks to fetch the tasks in order for his page
 export const getSubtasks = (req, res) => {
     connection.query(`SELECT * FROM tasks WHERE parentTaskId=${req.params.taskId}`, (err, rows) => {
         if (err) {
