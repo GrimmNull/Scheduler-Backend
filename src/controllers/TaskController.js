@@ -21,7 +21,8 @@ export const getTaskById = (req, res) => {
                 message: 'Task found successfully',
                 user: rows[0].userId,
                 description: rows[0].description,
-                deadline: rows[0].deadline.toString().replace(/ GMT.*/, ''),
+                startTime: rows[0].startTime.toISOString().replace(/:00\.000.+/, ''),
+                deadline: rows[0].deadline.toISOString().replace(/:00\.000.+/, ''),
                 completed: rows[0].completed === 1
             })
         }
@@ -151,6 +152,18 @@ export const updateCompletedStatus = (req, res) => {
                             }
                         })
                     }
+                } else {
+                    connection.query(`UPDATE tasks SET completed=${req.body.completed} WHERE parentTaskId=${req.params.taskId}`, (err) =>{
+                        if(err) {
+                            res.status(500).json({
+                                message: 'There was a server error when updating the complete status of the children'
+                            })
+                            throw err
+                        }
+                        res.json({
+                            message: 'The task and its subtasks were updated successfully'
+                        })
+                    })
                 }
             })
         }
@@ -163,7 +176,11 @@ export const updateTask = (req, res) => {
     // and the user id can't be updated
     for (const field of req.body.columns.split(" ")) {
         if (!['completed', 'userId'].includes(field)) {
-            updateFields.push(`${field} = '${req.body[field]}'`)
+            if(['startTime','deadline'].includes(field)){
+                updateFields.push(`${field} = '${req.body[field]}'`)
+            } else {
+                updateFields.push(`${field} = '${req.body[field]}'`)
+            }
         } else {
             res.status(400).json({
                 message: 'You can`t update the status or the userId here'
@@ -271,8 +288,8 @@ export const getSubtasks = (req, res) => {
                     userId: row.userId,
                     parentTaskId: row.parentTaskId,
                     description: row.description,
-                    startTime: row.startTime,
-                    deadline: row.deadline,
+                    startTime: row.startTime!==null? row.startTime.toISOString().replace(/:00\.000.+/, '') : row.startTime,
+                    deadline: row.deadline!==null? row.deadline.toISOString().replace(/:00\.000.+/, '') : row.deadline,
                     completed: row.completed === 1,
                     failed: row.failed === 1
                 }

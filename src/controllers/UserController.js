@@ -31,8 +31,8 @@ export const getUserTasks = (req, res) => {
                     taskId: row.id,
                     userId: row.userId,
                     parentTaskId: row.parentTaskId,
-                    startTime: row.startTime,
-                    deadline: row.deadline,
+                    startTime: row.startTime!==null? row.startTime.toISOString().replace(/:00\.000.+/, '') : row.startTime,
+                    deadline: row.deadline!==null? row.deadline.toISOString().replace(/:00\.000.+/, '') : row.deadline,
                     description: row.description,
                     completed: row.completed === 1,
                     failed: row.failed === 1
@@ -70,7 +70,7 @@ export const getUserById = (req, res) => {
 }
 
 export const checkCredentials = (req, res) => {
-    connection.query(`SELECT id,username, password FROM users WHERE username like '${req.body.username}'`, async (err, rows) => {
+    connection.query(`SELECT * FROM users WHERE username like '${req.body.username}'`, async (err, rows) => {
         if (err) {
             console.log(err)
             res.status(500).json({
@@ -96,6 +96,7 @@ export const checkCredentials = (req, res) => {
                     message:'Logged in',
                     userId: rows[0].id,
                     username: rows[0].username,
+                    email: rows[0].email,
                     token: token,
                     expiresAt: moment().add(72,'hours').format('YYYY-MM-DD HH:mm:ss')
                 })
@@ -160,8 +161,16 @@ export const editUser = async (req, res) => {
     }
     const decoded = await jwt.verify(req.body.ownerToken, secretKey)
     const userId = decoded.userId
+    if(parseInt(userId) !== parseInt(req.params.userId)){
+        res.status(400).json({
+            message: 'The owner id does not match the id from the link'
+        })
+        return
+    }
     //first we make sure that the updated column is a valid one
-    if (Object.keys(req.body).length > 1 || Object.keys(req.body).every(column => minimalColumns.includes(column))) {
+    if (Object.keys(req.body).length > 2 || Object.keys(req.body).every(column => {
+        return !minimalColumns.includes(column) && column!=='ownerToken'
+    })) {
         res.status(400).json({
             message: 'The selected column doesn`t exist or cannot be updated'
         })
@@ -181,7 +190,7 @@ export const editUser = async (req, res) => {
                     message: 'There is already someone with that username'
                 })
             } else {
-                connection.query(`UPDATE users SET username='${req.body[column]}' WHERE id=${userId}`, (err) => {
+                connection.query(`UPDATE users SET username='${req.body.username}' WHERE id=${userId}`, (err) => {
                     if (err) {
                         res.status(500).json({
                             message: 'There was a server error when trying to update the user'
@@ -223,9 +232,8 @@ export const editUser = async (req, res) => {
             }
         })
     } else {
-        //for everything else we just update the field directly
-        const column = Object.keys(req.body)[0]
-        connection.query(`UPDATE users SET ${column}='${req.body[column]}' WHERE id=${userId}`, (err) => {
+        const encryptedPassword= await bcrypt.hash(req.body.password,saltRounded)
+        connection.query(`UPDATE users SET password='${encryptedPassword}' WHERE id=${userId}`, (err) => {
             if (err) {
                 res.status(500).json({
                     message: 'There was a server error when trying to update the user'
