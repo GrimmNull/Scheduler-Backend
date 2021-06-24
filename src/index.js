@@ -4,6 +4,7 @@ import express from 'express'
 const app = express()
 import taskRouter from './routes/taskRoutes.js'
 import userRouter from './routes/userRoutes.js'
+import connection from "./databaseConnection.js";
 import cors from 'cors'
 import morgan from 'morgan'
 import cron from 'node-cron'
@@ -22,16 +23,20 @@ app.use('/tasks', taskRouter)
 app.use('/users', userRouter)
 
 
-//Folosim cron pentru a verifica din ora in ora daca avem task-uri ce au expirat
-cron.schedule('****', () => {
-    connection.query('UPDATE tasks SET failed=true WHERE deadline < (SELECT CURRENT_TIMESTAMP)', (err) => {
+//Folosim cron pentru a verifica din 20 in 20 de minute daca avem task-uri ce au expirat
+const task= cron.schedule('0 */20 * * * *', () => {
+    connection.query('UPDATE tasks SET failed=true WHERE deadline < CURRENT_TIMESTAMP', (err) => {
         if (err) {
             throw err
         } else {
             console.log("I've updated the failed status of the tasks")
         }
+    }, {
+        scheduled:false
     })
 })
+
+task.start()
 
 //app start
 app.listen(
