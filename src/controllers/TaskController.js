@@ -12,7 +12,7 @@ export const getTaskById = (req, res) => {
             })
             throw err
         }
-        if(!rows[0]){
+        if (!rows[0]) {
             res.status(404).json({
                 message: 'There is no task with this id'
             })
@@ -119,7 +119,7 @@ export const updateCompletedStatus = (req, res) => {
                     throw err
                 }
                 //if the parent id is not null, we want to see if every child of the parent is completed so we can change the status of the parent to completed too
-                if(parentId!==null){
+                if (parentId !== null) {
                     //if we changed the status of the child to completed, it may mean that the parent is completed too
                     if (req.body.completed) {
                         connection.query(`SELECT (SELECT count(*) FROM tasks WHERE parentTaskId=${parentId} AND completed=1)=(SELECT count(*) FROM tasks WHERE parentTaskId=${parentId}) as status`, (err, rows) => {
@@ -129,7 +129,7 @@ export const updateCompletedStatus = (req, res) => {
                                 })
                                 throw err
                             }
-                            if(rows[0].status===1){
+                            if (rows[0].status === 1) {
                                 connection.query(`UPDATE tasks SET completed=true WHERE id=${parentId}`)
                                 res.json({
                                     message: 'Task successfully updated',
@@ -153,8 +153,8 @@ export const updateCompletedStatus = (req, res) => {
                         })
                     }
                 } else {
-                    connection.query(`UPDATE tasks SET completed=${req.body.completed} WHERE parentTaskId=${req.params.taskId}`, (err) =>{
-                        if(err) {
+                    connection.query(`UPDATE tasks SET completed=${req.body.completed} WHERE parentTaskId=${req.params.taskId}`, (err) => {
+                        if (err) {
                             res.status(500).json({
                                 message: 'There was a server error when updating the complete status of the children'
                             })
@@ -176,7 +176,7 @@ export const updateTask = (req, res) => {
     // and the user id can't be updated
     for (const field of req.body.columns.split(" ")) {
         if (!['completed', 'userId'].includes(field)) {
-            if(['startTime','deadline'].includes(field)){
+            if (['startTime', 'deadline'].includes(field)) {
                 updateFields.push(`${field} = '${req.body[field]}'`)
             } else {
                 updateFields.push(`${field} = '${req.body[field]}'`)
@@ -288,8 +288,8 @@ export const getSubtasks = (req, res) => {
                     userId: row.userId,
                     parentTaskId: row.parentTaskId,
                     description: row.description,
-                    startTime: row.startTime!==null? row.startTime.toISOString().replace(/:00\.000.+/, '') : row.startTime,
-                    deadline: row.deadline!==null? row.deadline.toISOString().replace(/:00\.000.+/, '') : row.deadline,
+                    startTime: row.startTime !== null ? row.startTime.toISOString().replace(/:00\.000.+/, '') : row.startTime,
+                    deadline: row.deadline !== null ? row.deadline.toISOString().replace(/:00\.000.+/, '') : row.deadline,
                     completed: row.completed === 1,
                     failed: row.failed === 1
                 }

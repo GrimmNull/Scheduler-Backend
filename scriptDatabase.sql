@@ -1,3 +1,5 @@
+//Script pentru baza de date MySQL
+
 DROP TABLE users;
 
 CREATE TABLE users (

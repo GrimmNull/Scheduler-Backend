@@ -1,10 +1,12 @@
 //imports
 import express from 'express'
+
 const app = express()
 import taskRouter from './routes/taskRoutes.js'
 import userRouter from './routes/userRoutes.js'
 import cors from 'cors'
 import morgan from 'morgan'
+import cron from 'node-cron'
 //constants
 const PORT = 8000
 
@@ -19,6 +21,17 @@ app.use(morgan('combined'))
 app.use('/tasks', taskRouter)
 app.use('/users', userRouter)
 
+
+//Folosim cron pentru a verifica din ora in ora daca avem task-uri ce au expirat
+cron.schedule('****', () => {
+    connection.query('UPDATE tasks SET failed=true WHERE deadline < (SELECT CURRENT_TIMESTAMP)', (err) => {
+        if (err) {
+            throw err
+        } else {
+            console.log("I've updated the failed status of the tasks")
+        }
+    })
+})
 
 //app start
 app.listen(
