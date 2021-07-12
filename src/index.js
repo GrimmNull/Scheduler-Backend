@@ -8,8 +8,11 @@ import connection from "./databaseConnection.js";
 import cors from 'cors'
 import morgan from 'morgan'
 import cron from 'node-cron'
+import dotenv from 'dotenv';
+dotenv.config()
+
 //constants
-const PORT = 8000
+
 
 //initializations
 app.use(express.json())
@@ -40,8 +43,8 @@ task.start()
 
 //app start
 app.listen(
-    PORT,
-    () => console.log(`It resides at http://localhost:${PORT}`)
+    process.env.PORT,
+    () => console.log(`It resides at http://localhost:${process.env.PORT}`)
 )
 
 //app endpoint for a wrong adress

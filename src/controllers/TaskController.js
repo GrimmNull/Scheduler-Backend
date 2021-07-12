@@ -2,10 +2,9 @@ import connection from '../databaseConnection.js'
 import token from '../token.js'
 import jwt from 'jsonwebtoken'
 
-const dateGex = new RegExp('^\\d{4}\\-(0?[1-9]|1[012])\\-(0?[1-9]|[12][0-9]|3[01])$')
-
 export const getTaskById = (req, res) => {
-    connection.query(`SELECT * FROM tasks WHERE id=${req.params.id}`, (err, rows) => {
+    const getTaskQuery= `SELECT * FROM tasks WHERE id=` + connection.escape(req.params.id)
+    connection.query(getTaskQuery, (err, rows) => {
         if (err) {
             res.status(500).json({
                 message: 'There was a server error when trying to fetch the task'
@@ -46,7 +45,9 @@ export const addTask = async (req, res) => {
         })
         return
     }
-    connection.query(`SELECT username FROM users WHERE id=${ownerId}`, (err, rows) => {
+    //facem un request catre baza de date pentru a verifica daca userul exista
+    const usernameQuery= `SELECT username FROM users WHERE id=` + connection.escape(ownerId)
+    connection.query(usernameQuery, (err, rows) => {
         if (err) {
             res.send(500).json({
                 message: "There was a server error when retrieving the user"
@@ -62,7 +63,7 @@ export const addTask = async (req, res) => {
             //after that we use the id that we got to update the task with the actual information that we need
             //In the first phase we need to know its owner id, its parent id, if it has one
             const fields = parentTaskId ? '(userId, parentTaskId, completed)' : '(userId,completed)',
-                values = parentTaskId ? `(${ownerId}, ${parentTaskId},false)` : `(${ownerId},false)`
+                values = parentTaskId ? `(` + connection.escape(ownerId) + `,` +  connection.escape(parentTaskId) + `,false)` : `(` + connection.escape(ownerId) + `,false)`
             connection.query(`INSERT INTO tasks${fields} VALUES ${values}`, (err, result) => {
                 if (err) {
                     res.status(500).json({
@@ -88,7 +89,8 @@ export const addTask = async (req, res) => {
 
 export const updateCompletedStatus = (req, res) => {
     //we want to get the user id to make sure it's updated by its owner + it's parent id because we'll need it later
-    connection.query(`SELECT userId, parentTaskId FROM tasks WHERE id=${req.params.taskId}`, async (err, rows) => {
+    const userIdQuery= `SELECT userId, parentTaskId FROM tasks WHERE id=` + connection.escape(req.params.taskId)
+    connection.query(userIdQuery, async (err, rows) => {
         if (err) {
             res.status(500).json({
                 message: 'There was a server error when fetching the userId for this task'
@@ -111,7 +113,8 @@ export const updateCompletedStatus = (req, res) => {
         } else {
             //we update the status with no questions asked
             const parentId = rows[0].parentTaskId
-            connection.query(`UPDATE tasks SET completed=${req.body.completed} WHERE id=${req.params.taskId}`, (err) => {
+            const updateTask= `UPDATE tasks SET completed=` + connection.escape(req.body.completed) + ` WHERE id=` + connection.escape(req.params.taskId)
+            connection.query(updateTask, (err) => {
                 if (err) {
                     res.status(500).json({
                         message: 'There was an error when trying to update the complete status of the task'
@@ -122,7 +125,8 @@ export const updateCompletedStatus = (req, res) => {
                 if (parentId !== null) {
                     //if we changed the status of the child to completed, it may mean that the parent is completed too
                     if (req.body.completed) {
-                        connection.query(`SELECT (SELECT count(*) FROM tasks WHERE parentTaskId=${parentId} AND completed=1)=(SELECT count(*) FROM tasks WHERE parentTaskId=${parentId}) as status`, (err, rows) => {
+                        const statusQuery= `SELECT (SELECT count(*) FROM tasks WHERE parentTaskId=` + connection.escape(parentId) + ` AND completed=1)=(SELECT count(*) FROM tasks WHERE parentTaskId=` + connection.escape(parentId) + `) as status`
+                        connection.query(statusQuery, (err, rows) => {
                             if (err) {
                                 res.status(500).json({
                                     message: 'There was an error when trying to check the complete status of all the subtasks'
@@ -130,6 +134,7 @@ export const updateCompletedStatus = (req, res) => {
                                 throw err
                             }
                             if (rows[0].status === 1) {
+                                //daca totul a fost in regula la query-ul de deasupra atunci
                                 connection.query(`UPDATE tasks SET completed=true WHERE id=${parentId}`)
                                 res.json({
                                     message: 'Task successfully updated',
@@ -139,7 +144,8 @@ export const updateCompletedStatus = (req, res) => {
                         })
                     } else {
                         //if the child status is not completed, we know for sure that its parent is not completed either
-                        connection.query(`UPDATE tasks SET completed=false WHERE id=${parentId}`, (err) => {
+                        const updateParentTask= `UPDATE tasks SET completed=false WHERE id=${parentId}`
+                        connection.query(updateParentTask, (err) => {
                             if (err) {
                                 res.status(500).json({
                                     message: 'There was a server error when trying to update the complete status of the parent'
@@ -153,7 +159,8 @@ export const updateCompletedStatus = (req, res) => {
                         })
                     }
                 } else {
-                    connection.query(`UPDATE tasks SET completed=${req.body.completed} WHERE parentTaskId=${req.params.taskId}`, (err) => {
+                    const updateSubTasks= `UPDATE tasks SET completed=` + connection.escape(req.body.completed) +  ` WHERE parentTaskId=` + connection.escape(req.params.taskId)
+                    connection.query(updateSubTasks, (err) => {
                         if (err) {
                             res.status(500).json({
                                 message: 'There was a server error when updating the complete status of the children'
@@ -174,12 +181,14 @@ export const updateTask = (req, res) => {
     let updateFields = []
     //we go through each column to make sure that it's not the completed or userId column because the status we update with the function from before
     // and the user id can't be updated
+    //TODO: de rescris partea asta ca sa arate mai curat
     for (const field of req.body.columns.split(" ")) {
         if (!['completed', 'userId'].includes(field)) {
             if (['startTime', 'deadline'].includes(field)) {
-                updateFields.push(`${field} = '${req.body[field]}'`)
+                updateFields.push(`${field} = ${connection.escape(req.body[field].replace(/:00\.000.+/, ''))}`)
             } else {
-                updateFields.push(`${field} = '${req.body[field]}'`)
+                if(['failed','parentTaskId'].includes(field))
+                updateFields.push(`${field} = ${req.body[field]}`)
             }
         } else {
             res.status(400).json({
@@ -188,7 +197,8 @@ export const updateTask = (req, res) => {
             return
         }
     }
-    connection.query(`SELECT userId FROM tasks WHERE id=${req.params.taskId}`, async (err, rows) => {
+    const userIdQuery= `SELECT userId FROM tasks WHERE id=` + connection.escape(req.params.taskId)
+    connection.query(userIdQuery, async (err, rows) => {
         if (err) {
             res.status(500).json({
                 message: 'There was a server error when fetching the userId for this task'
@@ -211,7 +221,8 @@ export const updateTask = (req, res) => {
             return
         } else {
             //in case everything is fine, we just update the fields
-            connection.query(`UPDATE tasks SET ${updateFields} WHERE id=${req.params.taskId}`, (err, result) => {
+            const updateQuery= `UPDATE tasks SET ${updateFields} WHERE id=` + connection.escape(req.params.taskId)
+            connection.query(updateQuery, (err, result) => {
                 if (err) {
                     res.status(500).json({
                         message: 'There was an error when trying to update the task'
@@ -228,7 +239,8 @@ export const updateTask = (req, res) => {
 }
 
 export const deleteTask = (req, res) => {
-    connection.query(`SELECT userId FROM tasks WHERE id=${req.params.taskId}`, async (err, rows) => {
+    const getUserIdQuery= `SELECT userId FROM tasks WHERE id=` + connection.escape(req.params.taskId)
+    connection.query(getUserIdQuery, async (err, rows) => {
         if (err) {
             res.status(500).json({
                 message: 'There was a server error when fetching the userId for this task'
@@ -250,7 +262,8 @@ export const deleteTask = (req, res) => {
             })
             return
         } else {
-            connection.query(`DELETE FROM tasks WHERE id=${req.params.taskId}`, (err) => {
+            const deleteQuery= `DELETE FROM tasks WHERE id=` + connection.escape(req.params.taskId)
+            connection.query(deleteQuery, (err) => {
                 if (err) {
                     res.status(500).json({
                         message: 'There was an error when trying to delete the task'
@@ -270,7 +283,8 @@ export const deleteTask = (req, res) => {
 //we use this function to get the children of a task
 //this one is used in combination with getUserTasks to fetch the tasks in order for his page
 export const getSubtasks = (req, res) => {
-    connection.query(`SELECT * FROM tasks WHERE parentTaskId=${req.params.taskId}`, (err, rows) => {
+    const subtaskQuery= `SELECT * FROM tasks WHERE parentTaskId=` + connection.escape(req.params.taskId)
+    connection.query(subtaskQuery, (err, rows) => {
         if (err) {
             res.status(500).json({
                 message: 'There was a server error when trying to get the subtasks'

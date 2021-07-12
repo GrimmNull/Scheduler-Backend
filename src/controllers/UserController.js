@@ -14,7 +14,8 @@ export const getUserTasks = (req, res) => {
         rootOnlyRequest = 'AND parentTaskId is null'
     }
     //we fetch all the tasks (and subtasks if needed) for a user
-    connection.query(`SELECT * FROM tasks WHERE userId=${req.params.userId} ${rootOnlyRequest} ORDER BY parentTaskId ASC`, (err, rows) => {
+    const taskQuery=
+    connection.query(`SELECT * FROM tasks WHERE userId= ? ${rootOnlyRequest} ORDER BY parentTaskId ASC`,[req.params.userId] , (err, rows) => {
         if (err) {
             res.status(500).json({
                 message: 'There was a server error'
@@ -48,7 +49,7 @@ export const getUserTasks = (req, res) => {
 }
 
 export const getUserById = (req, res) => {
-    connection.query(`SELECT id,username,email FROM users WHERE id=${req.params.userId}`, (err, rows) => {
+    connection.query(`SELECT id,username,email FROM users WHERE id= ?`, [req.params.userId], (err, rows) => {
         if (err) {
             res.status(500).json({
                 message: 'There was a server error'
@@ -71,7 +72,7 @@ export const getUserById = (req, res) => {
 }
 
 export const checkCredentials = (req, res) => {
-    connection.query(`SELECT * FROM users WHERE username like '${req.body.username}'`, async (err, rows) => {
+    connection.query(`SELECT * FROM users WHERE username like ?`, [req.body.username], async (err, rows) => {
         if (err) {
             console.log(err)
             res.status(500).json({
@@ -121,7 +122,7 @@ export const addUser = (req, res) => {
     }
 
     //we check to see if there is a user with this mail or username
-    connection.query(`SELECT username FROM users WHERE username like '${username}' OR email like '${email}'`, async (err, rows) => {
+    connection.query(`SELECT username FROM users WHERE username like ? OR email like ?`, [username,email], async (err, rows) => {
         if (err) {
             res.status(500).json({
                 message: 'There was a server error when trying to search for a duplicate username or email'
@@ -135,7 +136,7 @@ export const addUser = (req, res) => {
         } else {
             //we encrypt the password, then insert the new user into the database
             const encryptedPassword = await bcrypt.hash(password, saltRounded)
-            connection.query(`INSERT INTO users(username,password,email) VALUES ('${username}','${encryptedPassword}', '${email}')`, (err, result) => {
+            connection.query(`INSERT INTO users(username,password,email) VALUES (?,?,?)`, [username,encryptedPassword,email], (err, result) => {
                 if (err) {
                     res.status(500).json({
                         message: 'There was a server error when adding the new user'
@@ -179,7 +180,7 @@ export const editUser = async (req, res) => {
     }
     //we check to see if we have to update the username because we have to make sure there are no duplicates
     if (req.body.username) {
-        connection.query(`SELECT * from users WHERE username like '${req.body.username}'`, (err, rows) => {
+        connection.query(`SELECT * FROM users WHERE username like ?`, [req.body.username], (err, rows) => {
             if (err) {
                 res.status(500).json({
                     message: 'There was an error when trying to search for a duplicate username'
@@ -191,7 +192,7 @@ export const editUser = async (req, res) => {
                     message: 'There is already someone with that username'
                 })
             } else {
-                connection.query(`UPDATE users SET username='${req.body.username}' WHERE id=${userId}`, (err) => {
+                connection.query(`UPDATE users SET username=? WHERE id= ?`, [req.body.username,userId], (err) => {
                     if (err) {
                         res.status(500).json({
                             message: 'There was a server error when trying to update the user'
@@ -206,7 +207,7 @@ export const editUser = async (req, res) => {
             }
         })
     } else if (req.body.email) { //same thing with the email address
-        connection.query(`SELECT * from users WHERE email like '${req.body.email}'`, (err, rows) => {
+        connection.query(`SELECT * FROM users WHERE email like ?`,[req.body.email], (err, rows) => {
             if (err) {
                 res.status(500).json({
                     message: 'There was an error when trying to search for a duplicate email'
@@ -218,7 +219,7 @@ export const editUser = async (req, res) => {
                     message: 'There is already someone with that email'
                 })
             } else {
-                connection.query(`UPDATE users SET email='${req.body[column]}' WHERE id=${userId}`, (err) => {
+                connection.query(`UPDATE users SET email=? WHERE id=?`, [req.body[column],userId], (err) => {
                     if (err) {
                         res.status(500).json({
                             message: 'There was a server error when trying to update the user'
@@ -234,7 +235,7 @@ export const editUser = async (req, res) => {
         })
     } else {
         const encryptedPassword = await bcrypt.hash(req.body.password, saltRounded)
-        connection.query(`UPDATE users SET password='${encryptedPassword}' WHERE id=${userId}`, (err) => {
+        connection.query(`UPDATE users SET password=? WHERE id=?`, [encryptedPassword,userId], (err) => {
             if (err) {
                 res.status(500).json({
                     message: 'There was a server error when trying to update the user'
@@ -251,7 +252,8 @@ export const editUser = async (req, res) => {
 }
 
 export const deleteUser = (req, res) => {
-    connection.query(`DELETE FROM users WHERE id=${req.params.userId}`, (err) => {
+    //TODO: add a check for who sends the request
+    connection.query(`DELETE FROM users WHERE id=?`, [req.params.userId], (err) => {
         if (err) {
             res.status(500).json({
                 message: 'There was a server error when trying to delete the user'
