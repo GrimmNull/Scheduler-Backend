@@ -1,30 +1,53 @@
 import connection from '../databaseConnection.js'
+import {bookshelfConn} from "../databaseConnection.js";
 import token from '../token.js'
 import jwt from 'jsonwebtoken'
+import Task from '../models/Task.js'
 
-export const getTaskById = (req, res) => {
-    const getTaskQuery= `SELECT * FROM tasks WHERE id=` + connection.escape(req.params.id)
-    connection.query(getTaskQuery, (err, rows) => {
+export const getUserTasks = (req, res) => {
+    const columns = 'parent.id as parentId, parent.userId as parentUserId,parent.description as parentDescription, parent.startTime as parentStart, parent.deadline as parentDeadline, parent.completed as parentCompleted, parent.failed as parentFailed, subtask.id as subtaskId, subtask.description as subtaskDescription, subtask.startTime as subtaskStart, subtask.deadline as subtaskDeadline, subtask.completed as subtaskCompleted, subtask.failed as subtaskFailed'
+    connection.query(`SELECT ${columns} from tasks parent LEFT JOIN tasks subtask ON subtask.parentTaskId=parent.id WHERE parent.parentTaskId IS NULL AND parent.userId=?`, [req.params.userId], (err, rows) => {
         if (err) {
             res.status(500).json({
                 message: 'There was a server error when trying to fetch the task'
             })
             throw err
         }
-        if (!rows[0]) {
-            res.status(404).json({
-                message: 'There is no task with this id'
-            })
-        } else {
-            res.json({
-                message: 'Task found successfully',
-                user: rows[0].userId,
-                description: rows[0].description,
-                startTime: rows[0].startTime.toISOString().replace(/:00\.000.+/, ''),
-                deadline: rows[0].deadline.toISOString().replace(/:00\.000.+/, ''),
-                completed: rows[0].completed === 1
-            })
-        }
+        let prevId = -1
+        const userTasks = rows.map(row => {
+            let result = []
+            if (prevId !== row.parentId) {
+                prevId = row.parentId
+                result.push({
+                    taskId: row.parentId,
+                    userId: row.parentUserId,
+                    parentTaskId: null,
+                    description: row.parentDescription,
+                    startTime: row.parentStart,
+                    deadline: row.parentDeadline,
+                    completed: row.parentCompleted,
+                    failed: row.parentFailed
+                })
+            }
+            if (row.subtaskId !== null) {
+                result.push({
+                    taskId: row.subtaskId,
+                    userId: row.parentUserId,
+                    parentTaskId: row.parentId,
+                    description: row.subtaskDescription,
+                    startTime: row.subtaskStart,
+                    deadline: row.subtaskDeadline,
+                    completed: row.subtaskCompleted,
+                    failed: row.subtaskFailed
+                })
+            }
+
+            return result
+        })
+        res.json({
+            message: 'It worked',
+            results: userTasks.flat(1)
+        })
     })
 }
 
@@ -46,51 +69,50 @@ export const addTask = async (req, res) => {
         return
     }
     //facem un request catre baza de date pentru a verifica daca userul exista
-    const usernameQuery= `SELECT username FROM users WHERE id=` + connection.escape(ownerId)
-    connection.query(usernameQuery, (err, rows) => {
-        if (err) {
-            res.send(500).json({
-                message: "There was a server error when retrieving the user"
-            })
-            throw err
-        }
-        if (!rows[0]) {
-            res.status(400).json({
-                message: 'There is no user with this id'
-            })
-        } else {
-            //when we add a task from the frontend, we just add it in the database so we can get an id
-            //after that we use the id that we got to update the task with the actual information that we need
-            //In the first phase we need to know its owner id, its parent id, if it has one
-            const fields = parentTaskId ? '(userId, parentTaskId, completed)' : '(userId,completed)',
-                values = parentTaskId ? `(` + connection.escape(ownerId) + `,` +  connection.escape(parentTaskId) + `,false)` : `(` + connection.escape(ownerId) + `,false)`
-            connection.query(`INSERT INTO tasks${fields} VALUES ${values}`, (err, result) => {
-                if (err) {
-                    res.status(500).json({
-                        message: 'There was an error when trying to add the task'
-                    })
-                    throw err
-                } else {
-                    res.json({
-                        message: 'Task successfully added',
-                        taskId: result.insertId,
-                        ownerId: ownerId,
-                        deadline: deadline,
-                        description: description,
-                        finished: false
-                    })
-                }
-            })
-        }
-    })
+        connection.query(`SELECT username FROM users WHERE id= ?`, [ownerId], (err, rows) => {
+            if (err) {
+                res.send(500).json({
+                    message: "There was a server error when retrieving the user"
+                })
+                throw err
+            }
+            if (!rows[0]) {
+                res.status(400).json({
+                    message: 'There is no user with this id'
+                })
+            } else {
+                //when we add a task from the frontend, we just add it in the database so we can get an id
+                //after that we use the id that we got to update the task with the actual information that we need
+                //In the first phase we need to know its owner id, its parent id, if it has one
+                const fields = parentTaskId ? '(userId, parentTaskId, completed)' : '(userId,completed)',
+                    values = parentTaskId ? `(` + connection.escape(ownerId) + `,` + connection.escape(parentTaskId) + `,false)` : `(` + connection.escape(ownerId) + `,false)`
+                connection.query(`INSERT INTO tasks${fields} VALUES ${values}`, (err, result) => {
+                    if (err) {
+                        res.status(500).json({
+                            message: 'There was an error when trying to add the task'
+                        })
+                        throw err
+                    } else {
+                        res.json({
+                            message: 'Task successfully added',
+                            taskId: result.insertId,
+                            ownerId: ownerId,
+                            startTime: startTime,
+                            deadline: deadline,
+                            description: description,
+                            finished: false
+                        })
+                    }
+                })
+            }
+        })
 
 }
 
 
 export const updateCompletedStatus = (req, res) => {
     //we want to get the user id to make sure it's updated by its owner + it's parent id because we'll need it later
-    const userIdQuery= `SELECT userId, parentTaskId FROM tasks WHERE id=` + connection.escape(req.params.taskId)
-    connection.query(userIdQuery, async (err, rows) => {
+    connection.query(`SELECT userId, parentTaskId FROM tasks WHERE id= ?`, [req.params.taskId], async (err, rows) => {
         if (err) {
             res.status(500).json({
                 message: 'There was a server error when fetching the userId for this task'
@@ -109,12 +131,10 @@ export const updateCompletedStatus = (req, res) => {
             res.status(400).json({
                 message: 'The id of the user doesn`t match with the id of the owner of this task'
             })
-            return
         } else {
             //we update the status with no questions asked
             const parentId = rows[0].parentTaskId
-            const updateTask= `UPDATE tasks SET completed=` + connection.escape(req.body.completed) + ` WHERE id=` + connection.escape(req.params.taskId)
-            connection.query(updateTask, (err) => {
+            connection.query(`UPDATE tasks SET completed=? WHERE id=?`, [req.body.completed, req.params.taskId], (err) => {
                 if (err) {
                     res.status(500).json({
                         message: 'There was an error when trying to update the complete status of the task'
@@ -125,8 +145,7 @@ export const updateCompletedStatus = (req, res) => {
                 if (parentId !== null) {
                     //if we changed the status of the child to completed, it may mean that the parent is completed too
                     if (req.body.completed) {
-                        const statusQuery= `SELECT (SELECT count(*) FROM tasks WHERE parentTaskId=` + connection.escape(parentId) + ` AND completed=1)=(SELECT count(*) FROM tasks WHERE parentTaskId=` + connection.escape(parentId) + `) as status`
-                        connection.query(statusQuery, (err, rows) => {
+                        connection.query(`SELECT (SELECT count(*) FROM tasks WHERE parentTaskId=? AND completed=1)=(SELECT count(*) FROM tasks WHERE parentTaskId=?) as status`, [parentId, parentId], (err, rows) => {
                             if (err) {
                                 res.status(500).json({
                                     message: 'There was an error when trying to check the complete status of all the subtasks'
@@ -144,8 +163,7 @@ export const updateCompletedStatus = (req, res) => {
                         })
                     } else {
                         //if the child status is not completed, we know for sure that its parent is not completed either
-                        const updateParentTask= `UPDATE tasks SET completed=false WHERE id=${parentId}`
-                        connection.query(updateParentTask, (err) => {
+                        connection.query(`UPDATE tasks SET completed=false WHERE id=?`, [parentId], (err) => {
                             if (err) {
                                 res.status(500).json({
                                     message: 'There was a server error when trying to update the complete status of the parent'
@@ -159,8 +177,7 @@ export const updateCompletedStatus = (req, res) => {
                         })
                     }
                 } else {
-                    const updateSubTasks= `UPDATE tasks SET completed=` + connection.escape(req.body.completed) +  ` WHERE parentTaskId=` + connection.escape(req.params.taskId)
-                    connection.query(updateSubTasks, (err) => {
+                    connection.query(`UPDATE tasks SET completed=? WHERE parentTaskId=?`, [req.body.completed, req.params.taskId], (err) => {
                         if (err) {
                             res.status(500).json({
                                 message: 'There was a server error when updating the complete status of the children'
@@ -181,24 +198,23 @@ export const updateTask = (req, res) => {
     let updateFields = []
     //we go through each column to make sure that it's not the completed or userId column because the status we update with the function from before
     // and the user id can't be updated
-    //TODO: de rescris partea asta ca sa arate mai curat
     for (const field of req.body.columns.split(" ")) {
-        if (!['completed', 'userId'].includes(field)) {
-            if (['startTime', 'deadline'].includes(field)) {
-                updateFields.push(`${field} = ${connection.escape(req.body[field].replace(/:00\.000.+/, ''))}`)
+        if (['startTime', 'deadline', 'description'].includes(field)) {
+            if (!['description'].includes(field)) {
+                updateFields.push(`${field} = ${connection.escape(req.body[field].split('.')[0])}`)
             } else {
-                if(['failed','parentTaskId'].includes(field))
-                updateFields.push(`${field} = ${req.body[field]}`)
+                updateFields.push(`${field} = ${connection.escape(req.body[field])}`)
             }
         } else {
             res.status(400).json({
-                message: 'You can`t update the status or the userId here'
+                message: 'You can`t update that column'
             })
             return
         }
+
+
     }
-    const userIdQuery= `SELECT userId FROM tasks WHERE id=` + connection.escape(req.params.taskId)
-    connection.query(userIdQuery, async (err, rows) => {
+    connection.query(`SELECT userId FROM tasks WHERE id=?`, [req.params.taskId], async (err, rows) => {
         if (err) {
             res.status(500).json({
                 message: 'There was a server error when fetching the userId for this task'
@@ -218,11 +234,9 @@ export const updateTask = (req, res) => {
             res.status(400).json({
                 message: 'The id of the user doesn`t match with the id of the owner of this task'
             })
-            return
         } else {
             //in case everything is fine, we just update the fields
-            const updateQuery= `UPDATE tasks SET ${updateFields} WHERE id=` + connection.escape(req.params.taskId)
-            connection.query(updateQuery, (err, result) => {
+            connection.query(`UPDATE tasks SET ${updateFields} WHERE id=?`, [req.params.taskId], (err, result) => {
                 if (err) {
                     res.status(500).json({
                         message: 'There was an error when trying to update the task'
@@ -238,80 +252,28 @@ export const updateTask = (req, res) => {
     })
 }
 
-export const deleteTask = (req, res) => {
-    const getUserIdQuery= `SELECT userId FROM tasks WHERE id=` + connection.escape(req.params.taskId)
-    connection.query(getUserIdQuery, async (err, rows) => {
-        if (err) {
-            res.status(500).json({
-                message: 'There was a server error when fetching the userId for this task'
-            })
-            throw err
+export const deleteTask = async (req, res) => {
+    const task = (await new Task({id: req.params.taskId}).fetch({
+        require: false
+    }))
+    const decoded = await jwt.verify(req.body.ownerToken, token)
+    const ownerId = decoded.userId
+    if (parseInt(ownerId)!==parseInt(task.get('userId'))) {
+        res.status(400).json({
+            message: 'You do not have permission to delete this task'
+        })
+        return
+    }
+    await bookshelfConn.transaction(async t => {
+        const subtasks=await new Task({parentTaskId: task.id}).fetchAll({
+            require: false
+        })
+        if(subtasks.toJSON().length){
+           await Promise.all(subtasks.map(subtask => subtask.destroy({transacting: t})))
         }
-        //we perform the same checks, then delete the task if everything is ok
-        if (!req.body.ownerToken) {
-            res.status(400).json({
-                message: 'You need to send an ownerToken with your request'
-            })
-            return
-        }
-        const decoded = await jwt.verify(req.body.ownerToken, token)
-        const ownerId = decoded.userId
-        if (ownerId !== rows[0].userId) {
-            res.status(400).json({
-                message: 'The id of the user doesn`t match with the id of the owner of this task'
-            })
-            return
-        } else {
-            const deleteQuery= `DELETE FROM tasks WHERE id=` + connection.escape(req.params.taskId)
-            connection.query(deleteQuery, (err) => {
-                if (err) {
-                    res.status(500).json({
-                        message: 'There was an error when trying to delete the task'
-                    })
-                    throw err
-                } else {
-                    res.json({
-                        message: 'The task was deleted successfully'
-                    })
-                }
-            })
-        }
+        await new Task({id: Number(task.id)}).destroy({transacting: t})
     })
-
-}
-
-//we use this function to get the children of a task
-//this one is used in combination with getUserTasks to fetch the tasks in order for his page
-export const getSubtasks = (req, res) => {
-    const subtaskQuery= `SELECT * FROM tasks WHERE parentTaskId=` + connection.escape(req.params.taskId)
-    connection.query(subtaskQuery, (err, rows) => {
-        if (err) {
-            res.status(500).json({
-                message: 'There was a server error when trying to get the subtasks'
-            })
-            return
-        }
-        if (!rows[0]) {
-            res.json({
-                message: 'This task doesn`t have any subtasks'
-            })
-        } else {
-            let results = rows.map(row => {
-                return {
-                    taskId: row.id,
-                    userId: row.userId,
-                    parentTaskId: row.parentTaskId,
-                    description: row.description,
-                    startTime: row.startTime !== null ? row.startTime.toISOString().replace(/:00\.000.+/, '') : row.startTime,
-                    deadline: row.deadline !== null ? row.deadline.toISOString().replace(/:00\.000.+/, '') : row.deadline,
-                    completed: row.completed === 1,
-                    failed: row.failed === 1
-                }
-            })
-            res.json({
-                message: 'Tasks successfully retrieved',
-                results: results
-            })
-        }
+    res.json({
+        message: 'Task was successfully deleted'
     })
 }

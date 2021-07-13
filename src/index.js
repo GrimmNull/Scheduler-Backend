@@ -9,9 +9,12 @@ import cors from 'cors'
 import morgan from 'morgan'
 import cron from 'node-cron'
 import dotenv from 'dotenv';
+import Knex from 'knex'
+import bookshelf from 'bookshelf'
 dotenv.config()
 
 //constants
+
 
 
 //initializations
