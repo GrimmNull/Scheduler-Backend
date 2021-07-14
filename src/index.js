@@ -30,8 +30,9 @@ app.use('/users', userRouter)
 
 
 //Folosim cron pentru a verifica din 20 in 20 de minute daca avem task-uri ce au expirat
+//TODO: de adaugat ca daca un subtask a fost esuat si parintele sa fie
 const task= cron.schedule('0 */20 * * * *', () => {
-    connection.query('UPDATE tasks SET failed=true WHERE deadline < CURRENT_TIMESTAMP', (err) => {
+    connection.query('UPDATE tasks SET failed=true WHERE completed!=1 AND deadline < CURRENT_TIMESTAMP', (err) => {
         if (err) {
             throw err
         } else {

@@ -1,4 +1,4 @@
-import connection from '../databaseConnection.js'
+import connection, {bookshelfConn} from '../databaseConnection.js'
 import secretKey from '../token.js'
 import bcrypt from 'bcrypt'
 import jwt from 'jsonwebtoken'
@@ -20,6 +20,22 @@ export const getUserById = async (req, res) => {
         return
     }
     res.json(user.toJSON({omitPivot: true}))
+}
+
+export const getUserStats = async (req, res) => {
+
+    let getForMonth= req.body.date ? `WHERE DATE_FORMAT(Date(${req.body.date}),'%Y-%m')=DATE_FORMAT(Date(deadline),'%Y-%m')` : ''
+
+    const stats= await bookshelfConn.knex.raw(`SELECT SUM(completed) AS completedTasks, SUM(completed=0 AND deadline<SYSDATE()) as failedTasks, SUM(completed=0 AND deadline>SYSDATE()) as pendingTasks, SUM(parentTaskId IS NOT null) as numberOfSubtasks, SUM(parentTaskId IS null) as numberOfTasks from tasks ${getForMonth}`)
+
+
+    res.json({
+        tasks: stats[0][0].numberOfTasks,
+        subtasks: stats[0][0].numberOfSubtasks,
+        completed: stats[0][0].completedTasks,
+        failed: stats[0][0].failedTasks,
+        pending: stats[0][0].pendingTasks
+    })
 }
 
 export const checkCredentials = async (req, res) => {
@@ -94,13 +110,13 @@ export const addUser = async (req, res) => {
     })
 }
 
-export const editUser = async (req, res) => {
-    const user= await new User({id: req.params.userId}).fetch({
-        require:false
+export const updateUser = async (req, res) => {
+    const user = await new User({id: req.params.userId}).fetch({
+        require: false
     })
-    if(!user){
+    if (!user) {
         res.status(400).json({
-            message:'There is no user with this id'
+            message: 'There is no user with this id'
         })
         return
     }
