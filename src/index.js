@@ -4,13 +4,12 @@ import express from 'express'
 const app = express()
 import taskRouter from './routes/taskRoutes.js'
 import userRouter from './routes/userRoutes.js'
+import categoryRouter from './routes/categoryRoutes.js'
 import connection from "./databaseConnection.js";
 import cors from 'cors'
 import morgan from 'morgan'
 import cron from 'node-cron'
 import dotenv from 'dotenv';
-import Knex from 'knex'
-import bookshelf from 'bookshelf'
 dotenv.config()
 
 //constants
@@ -27,7 +26,7 @@ app.use(morgan('combined'))
 //separated routers for tasks and users to have them better organized
 app.use('/tasks', taskRouter)
 app.use('/users', userRouter)
-
+app.use('/categories', categoryRouter)
 
 //Folosim cron pentru a verifica din 20 in 20 de minute daca avem task-uri ce au expirat
 //TODO: de adaugat ca daca un subtask a fost esuat si parintele sa fie

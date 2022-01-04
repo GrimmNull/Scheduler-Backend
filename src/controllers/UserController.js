@@ -1,15 +1,15 @@
-import connection, {bookshelfConn} from '../databaseConnection.js'
+import { bookshelfConn } from '../databaseConnection.js'
 import secretKey from '../token.js'
 import bcrypt from 'bcrypt'
 import jwt from 'jsonwebtoken'
-import moment from "moment";
+import moment from 'moment'
 import User from '../models/User.js'
 
 const minimalColumns = ['username', 'password', 'email']
 const saltRounded = 10
 
 export const getUserById = async (req, res) => {
-    const user = await new User({id: req.params.userId}).fetch({
+    const user = await new User({ id: req.params.userId }).fetch({
         require: false,
         columns: ['id', 'username', 'email', 'password']
     })
@@ -19,14 +19,12 @@ export const getUserById = async (req, res) => {
         })
         return
     }
-    res.json(user.toJSON({omitPivot: true}))
+    res.json(user.toJSON({ omitPivot: true }))
 }
 
 export const getUserStats = async (req, res) => {
-
-    let getForMonth= req.body.date ? `WHERE DATE_FORMAT(Date(${req.body.date}),'%Y-%m')=DATE_FORMAT(Date(deadline),'%Y-%m')` : ''
-
-    const stats= await bookshelfConn.knex.raw(`SELECT SUM(completed) AS completedTasks, SUM(completed=0 AND deadline<SYSDATE()) as failedTasks, SUM(completed=0 AND deadline>SYSDATE()) as pendingTasks, SUM(parentTaskId IS NOT null) as numberOfSubtasks, SUM(parentTaskId IS null) as numberOfTasks from tasks ${getForMonth}`)
+    let getForDay = req.query.date ? `WHERE DATE_FORMAT(Date('${req.query.date}'),'%Y-%m-%d')=DATE_FORMAT(Date(deadline),'%Y-%m-%d')` : ''
+    const stats = await bookshelfConn.knex.raw(`SELECT SUM(completed) AS completedTasks, SUM(completed=0 AND deadline<SYSDATE()) as failedTasks, SUM(completed=0 AND deadline>SYSDATE()) as pendingTasks, SUM(parentTaskId IS NOT null) as numberOfSubtasks, SUM(parentTaskId IS null) as numberOfTasks from tasks ${getForDay}`)
 
 
     res.json({
@@ -38,19 +36,41 @@ export const getUserStats = async (req, res) => {
     })
 }
 
+export const getUserMonthStats = async (req, res) => {
+    let date = req.query.date
+    if (!date) {
+        date = moment().format('YYYY-MM')
+    }
+    const monthDate = moment(date).format('YYYY-MM')
+    const rawData = await bookshelfConn.knex.raw(`
+SELECT DATE_FORMAT(deadline, '%Y-%m-%d')                                    AS day,
+       sum(CASE WHEN deadline < NOW() AND completed = 0 THEN 1 ELSE 0 END)  AS failed,
+       sum(CASE WHEN deadline >= NOW() AND completed = 1 THEN 1 ELSE 0 END) AS active,
+       sum(CASE WHEN completed = 1 THEN 1 ELSE 0 END)                       AS completed
+FROM tasks
+WHERE userId = ?
+  AND date_format(deadline, '%Y-%m') = ?
+GROUP BY DATE_FORMAT(deadline, '%Y-%m-%d')
+ORDER BY day;
+   `, [req.params.userId, monthDate])
+    return res.json(rawData[0])
+}
+
+
 export const checkCredentials = async (req, res) => {
-    const user = await (await new User().query(q => {
+    let user = (await new User().query(q => {
         q.where('users.username', 'like', `${req.body.username}`)
     }).fetch({
         require: false,
         columns: ['id', 'username', 'email', 'password']
-    })).toJSON()
+    }))
     if (!user) {
         res.status(404).json({
             message: 'There is no user with this username'
         })
         return
     }
+    user= user.toJSON()
     const passwordMatch = await bcrypt.compare(req.body.password, user.password)
     if (passwordMatch) {
         const token = await jwt.sign({
@@ -74,7 +94,7 @@ export const checkCredentials = async (req, res) => {
 }
 
 export const addUser = async (req, res) => {
-    const {username, email, password} = req.body
+    const { username, email, password } = req.body
     if (!minimalColumns.every(column => Object.keys(req.body).includes(column))) {
         res.status(400).send({
             message: 'You didn`t send all the necessary columns'
@@ -102,7 +122,7 @@ export const addUser = async (req, res) => {
         username: req.body.username,
         email: req.body.email,
         password: encryptedPassword
-    }).save(null, {method: 'insert'})
+    }).save(null, { method: 'insert' })
 
     res.json({
         message: 'Account successfully created',
@@ -111,7 +131,7 @@ export const addUser = async (req, res) => {
 }
 
 export const updateUser = async (req, res) => {
-    const user = await new User({id: req.params.userId}).fetch({
+    const user = await new User({ id: req.params.userId }).fetch({
         require: false
     })
     if (!user) {
@@ -151,7 +171,7 @@ export const updateUser = async (req, res) => {
                 })
                 return
             }
-            await user.save({username: req.body.username}, {method: 'update', patch: 'true'})
+            await user.save({ username: req.body.username }, { method: 'update', patch: 'true' })
             res.json({
                 message: 'The username was updated successfully'
             })
@@ -169,7 +189,7 @@ export const updateUser = async (req, res) => {
                 })
                 return
             }
-            await user.save({email: req.body.email}, {method: 'update', patch: 'true'})
+            await user.save({ email: req.body.email }, { method: 'update', patch: 'true' })
             res.json({
                 message: 'The email was updated successfully'
             })
@@ -177,7 +197,7 @@ export const updateUser = async (req, res) => {
         }
         case 'password': {
             const encryptedPassword = await bcrypt.hash(req.body.password, saltRounded)
-            await user.save({password: encryptedPassword}, {method: 'update', patch: 'true'})
+            await user.save({ password: encryptedPassword }, { method: 'update', patch: 'true' })
             res.json({
                 message: 'The password was updated successfully'
             })
@@ -201,7 +221,7 @@ export const deleteUser = async (req, res) => {
         return
     }
 
-    const user = await new User({id: req.params.userId}).fetch({
+    const user = await new User({ id: req.params.userId }).fetch({
         require: false
     })
 

@@ -5,7 +5,7 @@ DROP TABLE users;
 CREATE TABLE users (
 id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
 username VARCHAR(30) NOT NULL,
-password VARCHAR(50),
+password VARCHAR(100),
 email VARCHAR(50)
 );
 

@@ -1,6 +1,6 @@
 import {bookshelfConn} from "../databaseConnection.js";
 import User from './User.js'
-
+import Category from "./Category.js";
 const Task = bookshelfConn.Model.extend({
     tableName: 'tasks',
     subtasks(){
@@ -11,6 +11,9 @@ const Task = bookshelfConn.Model.extend({
     },
     user(){
         return this.hasOne(User, 'userId', 'id')
+    },
+    categories() {
+        return this.belongsToMany(Category,'task_categories','taskId','categoryId')
     }
 })
 
